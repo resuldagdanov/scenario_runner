@@ -9,6 +9,7 @@
 This module provides access to a scenario configuration parser
 """
 
+import carla
 import glob
 import os
 import xml.etree.ElementTree as ET
@@ -16,6 +17,23 @@ import xml.etree.ElementTree as ET
 from srunner.scenarioconfigs.scenario_configuration import ScenarioConfiguration, ActorConfigurationData
 from srunner.scenarioconfigs.route_scenario_configuration import RouteConfiguration
 
+
+def convert_json_to_transform(actor_dict):
+    """
+    Convert a JSON string to a CARLA transform
+    """
+    return carla.Transform(
+        carla.Location(
+            x=float(actor_dict.get('x')),
+            y=float(actor_dict.get('y')),
+            z=float(actor_dict.get('z'))
+        ),
+        carla.Rotation(
+            roll=0.0,
+            pitch=0.0,
+            yaw=float(actor_dict.get('yaw'))
+        )
+    )
 
 class ScenarioConfigurationParser(object):
 
@@ -95,9 +113,16 @@ class ScenarioConfigurationParser(object):
                 for other_actor in scenario.iter("other_actor"):
                     new_config.other_actors.append(ActorConfigurationData.parse_from_node(other_actor, 'scenario'))
 
+                for start_actor_flow in scenario.iter("start_actor_flow"):
+                    new_config.start_actor_flow = convert_json_to_transform(start_actor_flow)
+                for end_actor_flow in scenario.iter("end_actor_flow"):
+                    new_config.end_actor_flow = convert_json_to_transform(end_actor_flow)
+
                 scenario_configurations.append(new_config)
 
         return scenario_configurations
+
+    
 
     @staticmethod
     def get_list_of_scenarios(config_file_name):

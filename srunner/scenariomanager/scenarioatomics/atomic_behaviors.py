@@ -2715,6 +2715,7 @@ class ActorFlow(AtomicBehavior):
                 'vehicle.*', spawn_transform, rolename='scenario', safe_blueprint=True, tick=False
             )
             if actor is not None:
+                actor.apply_control(carla.VehicleControl(manual_gear_shift=True, gear=1))
                 actor_agent = BasicAgent(actor, 3.6 * self._speed, {'max_throttle': 1.0})
                 actor_agent.set_global_plan(self._route, False)
                 self._actor_agent_list.append([actor, actor_agent])
