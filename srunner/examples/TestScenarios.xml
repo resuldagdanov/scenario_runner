@@ -1,8 +1,33 @@
 <?xml version="1.0"?>
 <scenarios>
-    <scenario name="HighwayEntry_1" type="HighwayEntry" town="Highway">
-        <ego_vehicle x="-556.3" y="1054.8" z="0" yaw="180" model="vehicle.lincoln.mkz_2017" />
-        <start_actor_flow x="-619.7" y="1054.1" z="0" yaw="240"/>
+    <scenario name="HighwayEntry_EU" type="HighwayEntry" town="Highway">
+        <weather cloudiness="0" precipitation="0" precipitation_deposits="0" wind_intensity="0" sun_azimuth_angle="0" sun_altitude_angle="75" />
+        <ego_vehicle x="-556.3" y="1056.10" z="0" yaw="180" model="vehicle.lincoln.mkz_2017" />
+        <start_actor_flow x="-601.80" y="1085.10" z="0" yaw="240"/>
         <end_actor_flow x="-713.6" y="841.5" z="0" yaw="250"/>
+    </scenario>
+    <scenario name="HighwayEntry_USA_1" type="HighwayEntry" town="Highway">
+        <weather cloudiness="0" precipitation="0" precipitation_deposits="0" wind_intensity="0" sun_azimuth_angle="0" sun_altitude_angle="75" />
+        <ego_vehicle x="-356.60" y="2641.10" z="0" yaw="-160" model="vehicle.lincoln.mkz_2017" />
+        <start_actor_flow x="-443.40" y="2679.60" z="0" yaw="95"/>
+        <end_actor_flow x="-425.70" y="2474.80" z="0" yaw="95"/>
+    </scenario>
+    <scenario name="HighwayEntry_USA_2" type="HighwayEntry" town="Highway">
+        <weather cloudiness="0" precipitation="0" precipitation_deposits="0" wind_intensity="0" sun_azimuth_angle="0" sun_altitude_angle="75" />
+        <ego_vehicle x="176.10" y="-648.50" z="0" yaw="-50" model="vehicle.lincoln.mkz_2017" />
+        <start_actor_flow x="166.0" y="-692.40" z="0" yaw="180"/>
+        <end_actor_flow x="484.0" y="-639.20" z="0" yaw="195"/>
+    </scenario>
+    <scenario name="HighwayExit_EU" type="HighwayEntry" town="Highway">
+        <weather cloudiness="0" precipitation="0" precipitation_deposits="0" wind_intensity="0" sun_azimuth_angle="0" sun_altitude_angle="75" />
+        <ego_vehicle x="-411.30" y="1430.00" z="0" yaw="245" model="vehicle.lincoln.mkz_2017" />
+        <start_actor_flow x="-408.0" y="1429.20" z="0" yaw="65"/>
+        <end_actor_flow x="-554.40" y="1164.50" z="0" yaw="60"/>
+    </scenario>
+    <scenario name="HighwayExit_USA" type="HighwayEntry" town="Highway">
+        <weather cloudiness="0" precipitation="0" precipitation_deposits="0" wind_intensity="0" sun_azimuth_angle="0" sun_altitude_angle="75" />
+        <ego_vehicle x="176.70" y="-692.10" z="0" yaw="0" model="vehicle.lincoln.mkz_2017" />
+        <start_actor_flow x="180.30" y="-654.10" z="0" yaw="230"/>
+        <end_actor_flow x="449.50" y="-634.20" z="0" yaw="210"/>
     </scenario>
 </scenarios>
