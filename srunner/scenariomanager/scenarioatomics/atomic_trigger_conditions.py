@@ -998,7 +998,7 @@ class WaitUntilInFront(AtomicCondition):
         1: The front of the other_actor and the back of the actor are right next to each other
     """
 
-    def __init__(self, actor, other_actor, factor=1, check_distance=True, name="WaitUntilInFront"):
+    def __init__(self, actor, other_actor, factor=0, check_distance=True, name="WaitUntilInFront"):
         """
         Init
         """

@@ -30,4 +30,9 @@
         <start_actor_flow x="180.30" y="-654.10" z="0" yaw="230"/>
         <end_actor_flow x="449.50" y="-634.20" z="0" yaw="210"/>
     </scenario>
+    <scenario name="HighwayEntryCutIn_1" type="HighwayEntryCutIn" town="Highway">
+        <weather cloudiness="0" precipitation="0" precipitation_deposits="0" wind_intensity="0" sun_azimuth_angle="0" sun_altitude_angle="75" />
+        <ego_vehicle x="-619.20" y="1055.3" z="0" yaw="-120" model="vehicle.lincoln.mkz_2017" />
+        <other_actor x="-515.70" y="1048.5" z="0" yaw="150" model="vehicle.tesla.model3" />
+    </scenario>
 </scenarios>
