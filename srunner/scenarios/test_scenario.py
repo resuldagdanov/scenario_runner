@@ -21,6 +21,23 @@ from srunner.scenariomanager.scenarioatomics.atomic_criteria import CollisionTes
 from srunner.scenariomanager.scenarioatomics.atomic_trigger_conditions import DriveDistance
 from srunner.scenarios.basic_scenario import BasicScenario
 
+def convert_dict_to_transform(actor_dict):
+    """
+    Convert a JSON string to a CARLA transform
+    """
+    return carla.Transform(
+        carla.Location(
+            x=float(actor_dict['x']),
+            y=float(actor_dict['y']),
+            z=float(actor_dict['z'])
+        ),
+        carla.Rotation(
+            roll=0.0,
+            pitch=0.0,
+            yaw=float(actor_dict['yaw'])
+        )
+    )
+
 class HighwayEntry(BasicScenario):
     """
     This class holds everything required for a scenario in which another vehicle runs a red light
@@ -53,8 +70,8 @@ class HighwayEntry(BasicScenario):
         Custom initialization
         """
 
-        self._start_actor_flow = config.start_actor_flow
-        self._end_actor_flow = config.end_actor_flow
+        self._start_actor_flow = convert_dict_to_transform(config.start_actor_flow)
+        self._end_actor_flow = convert_dict_to_transform(config.end_actor_flow)
         self._drive_distance = 1.1 * self._start_actor_flow.location.distance(self._end_actor_flow.location)
 
     def _create_behavior(self):

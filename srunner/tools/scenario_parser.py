@@ -18,22 +18,6 @@ from srunner.scenarioconfigs.scenario_configuration import ScenarioConfiguration
 from srunner.scenarioconfigs.route_scenario_configuration import RouteConfiguration
 
 
-def convert_json_to_transform(actor_dict):
-    """
-    Convert a JSON string to a CARLA transform
-    """
-    return carla.Transform(
-        carla.Location(
-            x=float(actor_dict.get('x')),
-            y=float(actor_dict.get('y')),
-            z=float(actor_dict.get('z'))
-        ),
-        carla.Rotation(
-            roll=0.0,
-            pitch=0.0,
-            yaw=float(actor_dict.get('yaw'))
-        )
-    )
 
 class ScenarioConfigurationParser(object):
 
@@ -68,7 +52,6 @@ class ScenarioConfigurationParser(object):
             tree = ET.parse(file_name)
 
             for scenario in tree.iter("scenario"):
-
                 scenario_config_name = scenario.attrib.get('name', None)
                 scenario_config_type = scenario.attrib.get('type', None)
 
@@ -81,44 +64,41 @@ class ScenarioConfigurationParser(object):
                     if scenario_config_type != scenario_name:
                         continue
 
-                new_config = ScenarioConfiguration()
-                new_config.town = scenario.attrib.get('town', None)
-                new_config.name = scenario_config_name
-                new_config.type = scenario_config_type
-                new_config.other_actors = []
-                new_config.ego_vehicles = []
-                new_config.trigger_points = []
+                config = ScenarioConfiguration()
+                config.town = scenario.attrib.get('town')
+                config.name = scenario_config_name
+                config.type = scenario_config_type
 
-                for weather in scenario.iter("weather"):
-                    new_config.weather.cloudiness = float(weather.attrib.get("cloudiness", 0))
-                    new_config.weather.precipitation = float(weather.attrib.get("precipitation", 0))
-                    new_config.weather.precipitation_deposits = float(weather.attrib.get("precipitation_deposits", 0))
-                    new_config.weather.wind_intensity = float(weather.attrib.get("wind_intensity", 0.35))
-                    new_config.weather.sun_azimuth_angle = float(weather.attrib.get("sun_azimuth_angle", 0.0))
-                    new_config.weather.sun_altitude_angle = float(weather.attrib.get("sun_altitude_angle", 15.0))
-                    new_config.weather.fog_density = float(weather.attrib.get("fog_density", 0.0))
-                    new_config.weather.fog_distance = float(weather.attrib.get("fog_distance", 0.0))
-                    new_config.weather.wetness = float(weather.attrib.get("wetness", 0.0))
+                for elem in scenario.iter():
+                    if elem.tag == 'scenario':
+                        continue  # ET iters get the scenario element too, which has already been parsed
 
-                for ego_vehicle in scenario.iter("ego_vehicle"):
+                    # Elements available for all scenarios
+                    elif elem.tag == 'ego_vehicle':
+                        config.ego_vehicles.append(ActorConfigurationData.parse_from_node(elem, 'hero'))
+                        config.trigger_points.append(config.ego_vehicles[-1].transform)
+                    elif elem.tag == 'other_actor':
+                        config.other_actors.append(ActorConfigurationData.parse_from_node(elem, 'scenario'))
+                    elif elem.tag == 'weather':
+                        config.weather.cloudiness = float(elem.attrib.get("cloudiness", 0))
+                        config.weather.precipitation = float(elem.attrib.get("precipitation", 0))
+                        config.weather.precipitation_deposits = float(elem.attrib.get("precipitation_deposits", 0))
+                        config.weather.wind_intensity = float(elem.attrib.get("wind_intensity", 0.35))
+                        config.weather.sun_azimuth_angle = float(elem.attrib.get("sun_azimuth_angle", 0.0))
+                        config.weather.sun_altitude_angle = float(elem.attrib.get("sun_altitude_angle", 15.0))
+                        config.weather.fog_density = float(elem.attrib.get("fog_density", 0.0))
+                        config.weather.fog_distance = float(elem.attrib.get("fog_distance", 0.0))
+                        config.weather.wetness = float(elem.attrib.get("wetness", 0.0))
+                    elif elem.tag == 'route':
+                        route_conf = RouteConfiguration()
+                        route_conf.parse_xml(elem)
+                        config.route = route_conf
 
-                    new_config.ego_vehicles.append(ActorConfigurationData.parse_from_node(ego_vehicle, 'hero'))
-                    new_config.trigger_points.append(new_config.ego_vehicles[-1].transform)
+                    # Any other possible element, add it as a config attribute 
+                    else:
+                        exec('config.{}=elem.attrib'.format(elem.tag))
 
-                for route in scenario.iter("route"):
-                    route_conf = RouteConfiguration()
-                    route_conf.parse_xml(route)
-                    new_config.route = route_conf
-
-                for other_actor in scenario.iter("other_actor"):
-                    new_config.other_actors.append(ActorConfigurationData.parse_from_node(other_actor, 'scenario'))
-
-                for start_actor_flow in scenario.iter("start_actor_flow"):
-                    new_config.start_actor_flow = convert_json_to_transform(start_actor_flow)
-                for end_actor_flow in scenario.iter("end_actor_flow"):
-                    new_config.end_actor_flow = convert_json_to_transform(end_actor_flow)
-
-                scenario_configurations.append(new_config)
+                scenario_configurations.append(config)
 
         return scenario_configurations
 
