@@ -96,7 +96,7 @@ class ScenarioConfigurationParser(object):
 
                     # Any other possible element, add it as a config attribute 
                     else:
-                        exec('config.{}=elem.attrib'.format(elem.tag))
+                        config.other_parameters[elem.tag] = elem.attrib
 
                 scenario_configurations.append(config)
 
