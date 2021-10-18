@@ -69,12 +69,9 @@ class ScenarioConfigurationParser(object):
                 config.name = scenario_config_name
                 config.type = scenario_config_type
 
-                for elem in scenario.iter():
-                    if elem.tag == 'scenario':
-                        continue  # ET iters get the scenario element too, which has already been parsed
-
+                for elem in scenario.getchildren():
                     # Elements available for all scenarios
-                    elif elem.tag == 'ego_vehicle':
+                    if elem.tag == 'ego_vehicle':
                         config.ego_vehicles.append(ActorConfigurationData.parse_from_node(elem, 'hero'))
                         config.trigger_points.append(config.ego_vehicles[-1].transform)
                     elif elem.tag == 'other_actor':
@@ -101,8 +98,6 @@ class ScenarioConfigurationParser(object):
                 scenario_configurations.append(config)
 
         return scenario_configurations
-
-    
 
     @staticmethod
     def get_list_of_scenarios(config_file_name):
