@@ -16,9 +16,9 @@ import py_trees
 import carla
 
 from srunner.scenariomanager.carla_data_provider import CarlaDataProvider
-from srunner.scenariomanager.scenarioatomics.atomic_behaviors import ActorDestroy, ActorFlow
+from srunner.scenariomanager.scenarioatomics.atomic_behaviors import ActorDestroy, BasicAgentBehavior
 from srunner.scenariomanager.scenarioatomics.atomic_criteria import CollisionTest
-from srunner.scenariomanager.scenarioatomics.atomic_trigger_conditions import DriveDistance
+from srunner.scenariomanager.scenarioatomics.atomic_trigger_conditions import DriveDistance, InTimeToArrivalToVehicle
 from srunner.scenarios.basic_scenario import BasicScenario
 
 def convert_dict_to_transform(actor_dict):
@@ -38,7 +38,7 @@ def convert_dict_to_transform(actor_dict):
         )
     )
 
-class HighwayEntry(BasicScenario):
+class BycicleGroup(BasicScenario):
     """
     This class holds everything required for a scenario in which another vehicle runs a red light
     in front of the ego, forcing it to react. This vehicles are 'special' ones such as police cars,
@@ -53,12 +53,13 @@ class HighwayEntry(BasicScenario):
         """
         self._world = world
         self._map = CarlaDataProvider.get_map()
-        self._flow_speed = 10 # m/s
-        self._source_dist_interval = [5, 7] # m
+        self._bycicle_speed = float(config.other_parameters['bycicle_speed']['value'])
+        self._offset = float(config.other_parameters['bycicle_offset']['value'])
         self.timeout = timeout
-        self._drive_distance = 100
+        self._drive_distance = 200
+        self._arrival_time = 7
 
-        super(HighwayEntry, self).__init__("HighwayEntry",
+        super(BycicleGroup, self).__init__("BycicleGroup",
                                            ego_vehicles,
                                            config,
                                            world,
@@ -69,29 +70,34 @@ class HighwayEntry(BasicScenario):
         """
         Custom initialization
         """
-        self._start_actor_flow = convert_dict_to_transform(config.other_parameters['start_actor_flow'])
-        self._end_actor_flow = convert_dict_to_transform(config.other_parameters['end_actor_flow'])
-        self._flow_speed = float(config.other_parameters['flow_speed']['value'])
-        self._source_dist_interval = [
-            float(config.other_parameters['source_dist_interval']['from']),
-            float(config.other_parameters['source_dist_interval']['to'])
-        ]
-        self._drive_distance = 1.1 * self._start_actor_flow.location.distance(self._end_actor_flow.location)
+        bycicle_transform = config.other_actors[0].transform
+        bycicle_wp = self._map.get_waypoint(bycicle_transform.location)
+
+        # Displace the wp to the side
+        self._displacement = self._offset * bycicle_wp.lane_width / 2
+        r_vec = bycicle_wp.transform.get_right_vector()
+        w_loc = bycicle_wp.transform.location
+        w_loc += carla.Location(x=self._displacement * r_vec.x, y=self._displacement * r_vec.y)
+        bycicle_transform = carla.Transform(w_loc, bycicle_wp.transform.rotation)
+
+        bycicle = CarlaDataProvider.request_new_actor(config.other_actors[0].model, bycicle_transform)
+        self.other_actors.append(bycicle)
 
     def _create_behavior(self):
         """
         Hero vehicle is entering a junction in an urban area, at a signalized intersection,
         while another actor runs a red lift, forcing the ego to break.
         """
-        self._source_wp = self._map.get_waypoint(self._start_actor_flow.location)
-        self._sink_wp = self._map.get_waypoint(self._end_actor_flow.location)
-
-        root = py_trees.composites.Parallel(
+        sequence = py_trees.composites.Sequence()
+        behavior = py_trees.composites.Parallel(
             policy=py_trees.common.ParallelPolicy.SUCCESS_ON_ONE)
-        root.add_child(ActorFlow(
-            self._source_wp, self._sink_wp, self._source_dist_interval, 2, self._flow_speed, initial_speed=False))
-        root.add_child(DriveDistance(self.ego_vehicles[0], self._drive_distance))
-        return root
+        sequence.add_child(InTimeToArrivalToVehicle(self.ego_vehicles[0], self.other_actors[0], self._arrival_time))
+        behavior.add_child(BasicAgentBehavior(
+            self.other_actors[0], target_speed=self._bycicle_speed, opt_dict={'offset': self._displacement}))
+        behavior.add_child(DriveDistance(self.ego_vehicles[0], self._drive_distance))
+        sequence.add_child(behavior)
+        sequence.add_child(ActorDestroy(self.other_actors[0]))
+        return sequence
 
     def _create_test_criteria(self):
         """

@@ -2008,7 +2008,7 @@ class BasicAgentBehavior(AtomicBehavior):
 
     _acceptable_target_distance = 2
 
-    def __init__(self, actor, target_location=None, plan=None, target_speed=None, name="BasicAgentBehavior"):
+    def __init__(self, actor, target_location=None, plan=None, target_speed=None, opt_dict={}, name="BasicAgentBehavior"):
         """
         Set up actor and local planner
         """
@@ -2018,34 +2018,39 @@ class BasicAgentBehavior(AtomicBehavior):
             raise ValueError('Choose either a target_location or a plan, but not both')
         self._plan = plan
         self._target_location = target_location
+        self._opt_dict = opt_dict
         self._control = carla.VehicleControl()
 
     def initialise(self):
         """Initialises the agent"""
-        self._agent = BasicAgent(self._actor, self._target_speed)
-        if self._target_location:
+        self._agent = BasicAgent(self._actor, self._target_speed, self._opt_dict)
+        if not self._target_location and not self._plan:
+            return
+
+        if not self._target_location:
+            # If a plan is given, get the target location
+            self._target_location = self._plan[-1][0].transform.location
+        else:
             # If a target location is given, get the plan
             start_wp = self._map.get_waypoint(CarlaDataProvider.get_location(self._actor))
             end_wp = self._map.get_waypoint(self._target_location)
             self._plan = self._agent.trace_route(start_wp, end_wp)
         self._agent.set_global_plan(self._plan, False)
 
-        if not self._target_location:
-            # If a plan is given, get the target location
-            self._target_location = self._plan[-1][0].transform.location
-
     def update(self):
         """Moves the actor and waits for it to finish the plan"""
         new_status = py_trees.common.Status.RUNNING
 
-        self._control = self._agent.run_step()
+        self._actor.apply_control(self._agent.run_step())
+
+        if not self._target_location:
+            return new_status
 
         location = CarlaDataProvider.get_location(self._actor)
         if calculate_distance(location, self._target_location) < self._acceptable_target_distance:
             new_status = py_trees.common.Status.SUCCESS
 
         self.logger.debug("%s.update()[%s->%s]" % (self.__class__.__name__, self.status, new_status))
-        self._actor.apply_control(self._control)
 
         return new_status
 
@@ -2493,6 +2498,7 @@ class ActorDestroy(AtomicBehavior):
     def update(self):
         new_status = py_trees.common.Status.RUNNING
         if self._actor:
+            self._actor.set_light_state(carla.VehicleLightState.NONE)
             CarlaDataProvider.remove_actor_by_id(self._actor.id)
             self._actor = None
             new_status = py_trees.common.Status.SUCCESS
