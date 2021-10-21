@@ -71,6 +71,11 @@ class HighwayEntry(BasicScenario):
         """
         self._start_actor_flow = convert_dict_to_transform(config.other_parameters['start_actor_flow'])
         self._end_actor_flow = convert_dict_to_transform(config.other_parameters['end_actor_flow'])
+        self._flow_speed = float(config.other_parameters['flow_speed']['value'])
+        self._source_dist_interval = [
+            float(config.other_parameters['source_dist_interval']['from']),
+            float(config.other_parameters['source_dist_interval']['to'])
+        ]
         self._drive_distance = 1.1 * self._start_actor_flow.location.distance(self._end_actor_flow.location)
 
     def _create_behavior(self):
