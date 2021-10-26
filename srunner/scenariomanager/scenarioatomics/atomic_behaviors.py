@@ -2498,7 +2498,6 @@ class ActorDestroy(AtomicBehavior):
     def update(self):
         new_status = py_trees.common.Status.RUNNING
         if self._actor:
-            self._actor.set_light_state(carla.VehicleLightState.NONE)
             CarlaDataProvider.remove_actor_by_id(self._actor.id)
             self._actor = None
             new_status = py_trees.common.Status.SUCCESS

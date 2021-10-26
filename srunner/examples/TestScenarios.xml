@@ -40,6 +40,14 @@
         <flow_speed value="30"/>
         <source_dist_interval from="25" to="30"/>
     </scenario>
+    <scenario name="InterurbanLeftTurn_1" type="HighwayEntry" town="Highway">
+        <weather cloudiness="0" precipitation="0" precipitation_deposits="0" wind_intensity="0" sun_azimuth_angle="0" sun_altitude_angle="75" />
+        <ego_vehicle x="-31.30" y="-503.3" z="0" yaw="350" model="vehicle.lincoln.mkz_2017" />
+        <start_actor_flow x="98.6" y="-518.60" z="0" yaw="175"/>
+        <end_actor_flow x="-65.40" y="-499.7" z="0" yaw="170"/>
+        <flow_speed value="20"/>
+        <source_dist_interval from="20" to="25"/>
+    </scenario>
    <scenario name="HighwayEntry_USA_2" type="HighwayEntry" town="Highway">
         <weather cloudiness="0" precipitation="0" precipitation_deposits="0" wind_intensity="0" sun_azimuth_angle="0" sun_altitude_angle="75" />
         <ego_vehicle x="176.10" y="-648.50" z="0" yaw="-50" model="vehicle.lincoln.mkz_2017" />
