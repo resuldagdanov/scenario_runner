@@ -16,7 +16,7 @@ import py_trees
 import carla
 
 from srunner.scenariomanager.carla_data_provider import CarlaDataProvider
-from srunner.scenariomanager.scenarioatomics.atomic_behaviors import ActorDestroy, ActorFlow
+from srunner.scenariomanager.scenarioatomics.atomic_behaviors import ActorFlow
 from srunner.scenariomanager.scenarioatomics.atomic_criteria import CollisionTest
 from srunner.scenariomanager.scenarioatomics.atomic_trigger_conditions import DriveDistance
 from srunner.scenarios.basic_scenario import BasicScenario
@@ -38,7 +38,7 @@ def convert_dict_to_transform(actor_dict):
         )
     )
 
-class HighwayEntry(BasicScenario):
+class EnterActorFlow(BasicScenario):
     """
     This class holds everything required for a scenario in which another vehicle runs a red light
     in front of the ego, forcing it to react. This vehicles are 'special' ones such as police cars,
@@ -58,12 +58,12 @@ class HighwayEntry(BasicScenario):
         self.timeout = timeout
         self._drive_distance = 100
 
-        super(HighwayEntry, self).__init__("HighwayEntry",
-                                           ego_vehicles,
-                                           config,
-                                           world,
-                                           debug_mode,
-                                           criteria_enable=criteria_enable)
+        super(EnterActorFlow, self).__init__("EnterActorFlow",
+                                             ego_vehicles,
+                                             config,
+                                             world,
+                                             debug_mode,
+                                             criteria_enable=criteria_enable)
 
     def _initialize_actors(self, config):
         """
@@ -89,7 +89,7 @@ class HighwayEntry(BasicScenario):
         root = py_trees.composites.Parallel(
             policy=py_trees.common.ParallelPolicy.SUCCESS_ON_ONE)
         root.add_child(ActorFlow(
-            self._source_wp, self._sink_wp, self._source_dist_interval, 2, self._flow_speed, initial_speed=False))
+            self._source_wp, self._sink_wp, self._source_dist_interval, 2, self._flow_speed))
         root.add_child(DriveDistance(self.ego_vehicles[0], self._drive_distance))
         return root
 

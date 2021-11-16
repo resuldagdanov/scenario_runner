@@ -80,7 +80,7 @@ class ScenarioConfiguration(object):
     type = None
     route = None
     agent = None
-    weather = carla.WeatherParameters()
+    weather = carla.WeatherParameters(sun_altitude_angle=70)
     friction = None
     subtype = None
     route_var_name = None
