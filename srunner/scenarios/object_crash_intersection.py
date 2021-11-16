@@ -11,7 +11,6 @@ moving along the road and encounters a cyclist ahead after taking a right or lef
 
 from __future__ import print_function
 
-import math
 import py_trees
 
 import carla
@@ -19,8 +18,7 @@ import carla
 from srunner.scenariomanager.carla_data_provider import CarlaDataProvider
 from srunner.scenariomanager.scenarioatomics.atomic_behaviors import (ActorDestroy,
                                                                       HandBrakeVehicle,
-                                                                      KeepVelocityFromStart,
-                                                                      StartEngine)
+                                                                      KeepVelocity)
 from srunner.scenariomanager.scenarioatomics.atomic_criteria import CollisionTest
 from srunner.scenariomanager.scenarioatomics.atomic_trigger_conditions import (InTriggerDistanceToLocation,
                                                                                InTimeToArrivalToLocation,
@@ -65,6 +63,7 @@ class BaseVehicleTurning(BasicScenario):
 
     This is a single ego vehicle scenario
     """
+    _subtype = None
 
     def __init__(self, world, ego_vehicles, config, randomize=False, debug_mode=False, criteria_enable=True,
                  timeout=60, name="BaseVehicleTurning"):
@@ -85,7 +84,7 @@ class BaseVehicleTurning(BasicScenario):
         self._adversary_transform = None
 
         self._collision_wp = None
-        self._adversary_speed = 4.0 # Speed of the adversary [m/s]
+        self._adversary_speed = 4.0  # Speed of the adversary [m/s]
         self._reaction_time = 0.5  # Time the agent has to react to avoid the collision [s]
         self._min_trigger_dist = 6.0  # Min distance to the collision location that triggers the adversary [m]
         self._ego_end_distance = 40
@@ -167,11 +166,7 @@ class BaseVehicleTurning(BasicScenario):
             sequence.add_child(Scenario4Manager(self._spawn_dist))
 
         # First waiting behavior
-        wait = py_trees.composites.Parallel(
-            policy=py_trees.common.ParallelPolicy.SUCCESS_ON_ONE, name="WaitForEgo")
-        wait.add_child(WaitEndIntersection(self.ego_vehicles[0]))
-        wait.add_child(StartEngine(self.other_actors[0]))
-        sequence.add_child(wait)
+        sequence.add_child(WaitEndIntersection(self.ego_vehicles[0]))
 
         # Adversary trigger behavior
         trigger_adversary = py_trees.composites.Parallel(
@@ -183,11 +178,17 @@ class BaseVehicleTurning(BasicScenario):
         sequence.add_child(trigger_adversary)
         sequence.add_child(HandBrakeVehicle(self.other_actors[0], False))
 
-        # Move the adversary. Duration and speed are twice their value to avoid the adversary dissapearing mid-lane
+        # Move the adversary.
         speed_duration = 2.0 * collision_duration
         speed_distance = 2.0 * collision_distance
-        sequence.add_child(KeepVelocityFromStart(
-            self.other_actors[0], self._adversary_speed, True, speed_duration, speed_distance, name="AdversaryCrossing"))
+        sequence.add_child(KeepVelocity(
+            self.other_actors[0],
+            self._adversary_speed,
+            True,
+            speed_duration,
+            speed_distance,
+            name="AdversaryCrossing")
+        )
 
         # Remove everything
         sequence.add_child(ActorDestroy(self.other_actors[0], name="DestroyAdversary"))

@@ -14,7 +14,6 @@ from __future__ import print_function
 import math
 import traceback
 import xml.etree.ElementTree as ET
-from numpy import random
 
 import py_trees
 
@@ -166,7 +165,8 @@ class RouteScenario(BasicScenario):
                                                              timeout=self.timeout,
                                                              debug_mode=debug_mode)
 
-        self.list_scenarios.append(BackgroundActivity(world, ego_vehicle, self.config, self.route, timeout=self.timeout))
+        self.list_scenarios.append(BackgroundActivity(
+            world, ego_vehicle, self.config, self.route, timeout=self.timeout))
 
         super(RouteScenario, self).__init__(name=config.name,
                                             ego_vehicles=[ego_vehicle],
@@ -265,13 +265,13 @@ class RouteScenario(BasicScenario):
         world.debug.draw_point(waypoints[-1][0].location + carla.Location(z=vertical_shift), size=0.05,
                                color=carla.Color(128, 0, 0), life_time=persistency)
 
-    def _scenario_sampling(self, potential_scenarios_definitions, random_seed=0):
+    def _scenario_sampling(self, potential_scenarios_definitions):
         """
         The function used to sample the scenarios that are going to happen for this route.
         """
 
         # fix the random seed for reproducibility
-        rng = random.RandomState(random_seed)
+        rng = CarlaDataProvider.get_random_seed()
 
         def position_sampled(scenario_choice, sampled_scenarios):
             """
