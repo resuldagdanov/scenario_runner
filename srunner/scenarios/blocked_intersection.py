@@ -95,7 +95,6 @@ class BlockedIntersection(BasicScenario):
 
         blocker.set_simulate_physics(False)
         blocker.set_location(self._blocker_transform.location + carla.Location(z=-200))
-
         lights = blocker.get_light_state()
         lights |= carla.VehicleLightState.Brake
         blocker.set_light_state(carla.VehicleLightState(lights))
