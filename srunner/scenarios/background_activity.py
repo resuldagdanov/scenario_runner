@@ -176,6 +176,8 @@ class BackgroundBehavior(AtomicBehavior):
         self._tm.global_percentage_speed_difference(0.0)
         self._rng = CarlaDataProvider.get_random_seed()
 
+        self._attribute_filter = {'base_type': 'car', 'special_type': '', 'has_lights': True, }
+
         # Global variables
         self._ego_actor = ego_actor
         self._ego_state = EGO_ROAD
@@ -185,7 +187,7 @@ class BackgroundBehavior(AtomicBehavior):
         self._get_route_data(route)
         self._actors_speed_perc = {}  # Dictionary actor - percentage
         self._all_actors = []
-        self._lane_width_threshold = 2  # Used to stop some behaviors at narrow lanes to avoid problems [m]
+        self._lane_width_threshold = 2.25  # Used to stop some behaviors at narrow lanes to avoid problems [m]
 
         self._spawn_vertical_shift = 0.2
         self._reuse_dist = 10  # When spawning actors, might reuse actors closer to this distance
@@ -224,8 +226,9 @@ class BackgroundBehavior(AtomicBehavior):
         self._junction_sources_dist = 40  # Distance from the entry sources to the junction [m]
         self._junction_sources_max_actors = 6  # Maximum vehicles alive at the same time per source
         self._junction_spawn_dist = 15  # Distance between spawned vehicles [m]
+        self._junction_minimum_source_dist = 15  # Minimum distance between sources and their junction
 
-        self._junction_source_perc = 70  # Probability [%] of the source being created
+        self._junction_source_perc = 80  # Probability [%] of the source being created
 
         # Opposite lane variables
         self._opposite_actors = []
@@ -1207,6 +1210,10 @@ class BackgroundBehavior(AtomicBehavior):
                 prev_wp = prev_wps[0]
                 moved_dist += 5
 
+            # Don't add junction sources too close to the junction
+            if moved_dist < self._junction_minimum_source_dist:
+                continue
+
             source = Source(prev_wp, [], entry_lane_wp=wp)
             entry_lane_key = get_lane_key(wp)
             if entry_lane_key in junction.inactive_entry_keys:
@@ -1652,19 +1659,6 @@ class BackgroundBehavior(AtomicBehavior):
             self._start_road_front_vehicles()
             py_trees.blackboard.Blackboard().set("BA_StartFrontVehicles", None, True)
 
-        # Handles road accident scenario
-        handle_start_accident_data = py_trees.blackboard.Blackboard().get('BA_StartObstacleScenario')
-        if handle_start_accident_data is not None:
-            accident_wp, distance, direction, stop_back_vehicles = handle_start_accident_data
-            self._handle_lanechange_scenario(accident_wp, distance, direction, stop_back_vehicles)
-            py_trees.blackboard.Blackboard().set('BA_StartObstacleScenario', None, True)
-
-        # Handles road accident scenario
-        handle_end_accident_data = py_trees.blackboard.Blackboard().get('BA_EndObstacleScenario')
-        if handle_end_accident_data is not None:
-            self._road_extra_front_actors = 0
-            py_trees.blackboard.Blackboard().set('BA_EndObstacleScenario', None, True)
-
         # Leave space in front
         leave_space_data = py_trees.blackboard.Blackboard().get('BA_LeaveSpaceInFront')
         if leave_space_data is not None:
@@ -1754,45 +1748,6 @@ class BackgroundBehavior(AtomicBehavior):
                 actor.set_transform(new_transform)
             else:
                 self._destroy_actor(actor)
-
-    def _handle_lanechange_scenario(self, accident_wp, distance, direction, stop_back_vehicles=False):
-        """
-        Handles the scenarios in which the BA has to change lane,
-        generally due to an obstacle in the road (accident / construction / stopped vehicle...)
-        """
-        ego_wp = self._route[self._route_index]
-        lane_change_actors = self._road_dict[get_lane_key(ego_wp)].actors
-
-        if direction == 'left':
-            first_wp = accident_wp.get_left_lane().next(distance / 4)[0]
-            second_wp = first_wp.next(distance / 2)[0]
-            third_wp = second_wp.get_right_lane().next(distance / 4)[0]
-        else:
-            first_wp = accident_wp.get_right_lane().next(distance / 4)[0]
-            second_wp = first_wp.next(distance / 2)[0]
-            third_wp = second_wp.get_left_lane().next(distance / 4)[0]
-
-        vehicle_path = [first_wp.transform.location,
-                        second_wp.transform.location,
-                        third_wp.transform.location]
-
-        for i, actor in enumerate(lane_change_actors):
-
-            location = CarlaDataProvider.get_location(actor)
-
-            if i == 0:
-                # First actor might get blocked by the accident, so teleport it
-                distance = location.distance(third_wp.transform.location)
-                if distance > 0:
-                    self._move_actors_forward([actor], distance)
-
-            elif not self._is_location_behind_ego(location):
-                # The others can just lane change, which will also teach the ego what to do
-                self._tm.set_path(actor, vehicle_path)
-                self._road_extra_front_actors += 1
-            elif stop_back_vehicles:
-                # Stop the vehicles behind
-                self._actors_speed_perc[actor] = 0
 
     def _switch_route_sources(self, enabled):
         """
@@ -2147,7 +2102,7 @@ class BackgroundBehavior(AtomicBehavior):
 
         actors = CarlaDataProvider.request_new_batch_actors(
             'vehicle.*', len(spawn_transforms), spawn_transforms, True, False, 'background',
-            attribute_filter={'base_type': 'car', 'has_lights': True}, tick=False)
+            attribute_filter=self._attribute_filter, tick=False)
 
         if not actors:
             return actors
@@ -2170,7 +2125,7 @@ class BackgroundBehavior(AtomicBehavior):
         )
         actor = CarlaDataProvider.request_new_actor(
             'vehicle.*', new_transform, rolename='background',
-            autopilot=True, random_location=False, attribute_filter={'base_type': 'car', 'has_lights': True}, tick=False)
+            autopilot=True, random_location=False, attribute_filter=self._attribute_filter, tick=False)
 
         if not actor:
             return actor
@@ -2205,9 +2160,26 @@ class BackgroundBehavior(AtomicBehavior):
                     string += '_[' + lane_key + ']'
                     draw_string(self._world, location, string, DEBUG_ROAD, False)
 
-                # if actor in scenario_actors or self._is_location_behind_ego(location):
+                # Actors part of scenarios are their own category, ignore them
                 if actor in self._scenario_stopped_actors:
                     continue
+
+                # TODO: Lane changes are weird with the TM, so just stop them
+                actor_wp = self._map.get_waypoint(location)
+                if actor_wp.lane_width < self._lane_width_threshold:
+
+                    # Ensure only ending lanes are affected. not sure if it is needed though
+                    next_wps = actor_wp.next(0.5)
+                    if next_wps and next_wps[0].lane_width < actor_wp.lane_width:
+                        actor.set_target_velocity(carla.Vector3D(0, 0, 0))
+                        self._actors_speed_perc[actor] = 0
+                        lights = actor.get_light_state()
+                        lights |= carla.VehicleLightState.RightBlinker
+                        lights |= carla.VehicleLightState.LeftBlinker
+                        lights |= carla.VehicleLightState.Position
+                        actor.set_light_state(carla.VehicleLightState(lights))
+                        actor.set_autopilot(False)
+                        continue
 
                 self._set_road_actor_speed(location, actor)
 

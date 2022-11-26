@@ -2899,6 +2899,8 @@ class ActorFlow(AtomicBehavior):
         self._max_spawn_dist = spawn_dist_interval[1]
         self._spawn_dist = self._rng.uniform(self._min_spawn_dist, self._max_spawn_dist)
 
+        self._attribute_filter = {'base_type': 'car', 'has_lights': True, 'special_type': ''}
+
         self._actor_list = []
         self._collision_sensor_list = []
 
@@ -2920,7 +2922,7 @@ class ActorFlow(AtomicBehavior):
     def _spawn_actor(self, transform):
         actor = CarlaDataProvider.request_new_actor(
             'vehicle.*', transform, rolename='scenario',
-            attribute_filter={'base_type': 'car', 'has_lights': True}, tick=False
+            attribute_filter=self._attribute_filter, tick=False
         )
         if actor is None:
             return py_trees.common.Status.RUNNING
@@ -3016,7 +3018,7 @@ class OppositeActorFlow(AtomicBehavior):
     """
 
     def __init__(self, reference_wp, reference_actor, spawn_dist_interval,
-                 time_distance=3.5, sink_dist=2, name="OppositeActorFlow"):
+                 time_distance=1.5, base_distance=30, sink_dist=2, name="OppositeActorFlow"):
         """
         Setup class members
         """
@@ -3028,12 +3030,14 @@ class OppositeActorFlow(AtomicBehavior):
         self._reference_wp = reference_wp
         self._reference_actor = reference_actor
         self._time_distance = time_distance
-
+        self._base_distance = base_distance
         self._min_spawn_dist = spawn_dist_interval[0]
         self._max_spawn_dist = spawn_dist_interval[1]
         self._spawn_dist = self._rng.uniform(self._min_spawn_dist, self._max_spawn_dist)
 
         self._sink_dist = sink_dist
+
+        self._attribute_filter = {'base_type': 'car', 'has_lights': True, 'special_type': ''}
 
         # Opposite direction needs earlier vehicle detection
         self._opt_dict = {'base_vehicle_threshold': 10, 'detection_speed_ratio': 1.6}
@@ -3070,8 +3074,8 @@ class OppositeActorFlow(AtomicBehavior):
 
     def initialise(self):
         """Get the actor flow source and sink, depending on the reference actor speed"""
-        self._speed = self._reference_actor.get_speed_limit()
-        self._flow_distance = self._time_distance * self._speed
+        self._speed = self._reference_actor.get_speed_limit() # Km / h
+        self._flow_distance = self._time_distance * self._speed + self._base_distance
 
         self._sink_wp = self._move_waypoint_forward(self._reference_wp, self._flow_distance)
         self._source_wp = self._move_waypoint_backwards(self._reference_wp, self._flow_distance)
@@ -3087,12 +3091,12 @@ class OppositeActorFlow(AtomicBehavior):
     def _spawn_actor(self):
         actor = CarlaDataProvider.request_new_actor(
             'vehicle.*', self._source_transform, rolename='scenario',
-            attribute_filter={'base_type': 'car', 'has_lights': True}, tick=False
+            attribute_filter=self._attribute_filter, tick=False
         )
         if actor is None:
             return py_trees.common.Status.RUNNING
 
-        controller = BasicAgent(actor, 3.6 * self._speed, self._opt_dict, self._map, self._grp)
+        controller = BasicAgent(actor, self._speed, self._opt_dict, self._map, self._grp)
         controller.set_global_plan(self._route)
         self._actor_list.append([actor, controller])
 
@@ -3171,6 +3175,8 @@ class InvadingActorFlow(AtomicBehavior):
 
         self._sink_dist = sink_dist
 
+        self._attribute_filter = {'base_type': 'car', 'has_lights': True, 'special_type': ''}
+
         self._actor_list = []
 
         # Opposite direction needs earlier vehicle detection
@@ -3182,19 +3188,19 @@ class InvadingActorFlow(AtomicBehavior):
 
     def initialise(self):
         """Get the actor flow source and sink, depending on the reference actor speed"""
-        self._speed = self._reference_actor.get_speed_limit()
+        self._speed = self._reference_actor.get_speed_limit()  # Km / h
         self._route = self._grp.trace_route(self._source_location, self._sink_location)
         return super().initialise()
 
     def _spawn_actor(self):
         actor = CarlaDataProvider.request_new_actor(
             'vehicle.*', self._source_transform, rolename='scenario',
-            attribute_filter={'base_type': 'car', 'has_lights': True}, tick=False
+            attribute_filter=self._attribute_filter, tick=False
         )
         if actor is None:
             return py_trees.common.Status.RUNNING
 
-        controller = BasicAgent(actor, 3.6 * self._speed, self._opt_dict, self._map, self._grp)
+        controller = BasicAgent(actor, self._speed, self._opt_dict, self._map, self._grp)
         controller.set_global_plan(self._route)
         self._actor_list.append([actor, controller])
 

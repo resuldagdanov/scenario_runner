@@ -87,7 +87,7 @@ class BlockedIntersection(BasicScenario):
         # Spawn the blocker vehicle
         blocker = CarlaDataProvider.request_new_actor(
             "vehicle.*.*", self._blocker_transform,
-            attribute_filter={'base_type': 'car', 'has_lights': True}
+            attribute_filter={'base_type': 'car', 'has_lights': True, 'special_type': ''}
         )
         if blocker is None:
             raise Exception("Couldn't spawn the blocker vehicle")
@@ -95,6 +95,9 @@ class BlockedIntersection(BasicScenario):
 
         blocker.set_simulate_physics(False)
         blocker.set_location(self._blocker_transform.location + carla.Location(z=-200))
+        lights = blocker.get_light_state()
+        lights |= carla.VehicleLightState.Brake
+        blocker.set_light_state(carla.VehicleLightState(lights))
 
     def _create_behavior(self):
         """
