@@ -63,7 +63,7 @@ class OppositeVehicleJunction(BasicScenario):
         self.timeout = timeout
 
         self._sync_time = 2.2  # Time the agent has to react to avoid the collision [s]
-        self._min_trigger_dist = 9.0  # Min distance to the collision location that triggers the adversary [m]
+        self._min_trigger_dist = 12.0  # Min distance to the collision location that triggers the adversary [m]
 
         self._lights = carla.VehicleLightState.Special1 | carla.VehicleLightState.Special2
 
@@ -216,7 +216,6 @@ class OppositeVehicleRunningRedLight(OppositeVehicleJunction):
 
         sequence.add_child(trigger_adversary)
 
-
         end_location = self._sink_wp.transform.location
         start_location = self._spawn_wp.transform.location
         time = start_location.distance(end_location) / self._adversary_speed
@@ -231,6 +230,8 @@ class OppositeVehicleRunningRedLight(OppositeVehicleJunction):
         main_behavior.add_child(Idle(time))
 
         sequence.add_child(main_behavior)
+        sequence.add_child(ActorDestroy(self.other_actors[0]))
+        sequence.add_child(WaitEndIntersection(self.ego_vehicles[0]))
 
         tls_behavior = py_trees.composites.Parallel(policy=py_trees.common.ParallelPolicy.SUCCESS_ON_ONE)
         tls_behavior.add_child(TrafficLightFreezer(self._tl_dict))
@@ -248,8 +249,6 @@ class OppositeVehicleRunningRedLight(OppositeVehicleJunction):
             ))
         root.add_child(ActorTransformSetter(self.other_actors[0], self._spawn_location))
         root.add_child(tls_behavior)
-        root.add_child(ActorDestroy(self.other_actors[0]))
-        root.add_child(WaitEndIntersection(self.ego_vehicles[0]))
 
         return root
 

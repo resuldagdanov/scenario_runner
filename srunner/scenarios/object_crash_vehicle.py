@@ -167,7 +167,7 @@ class DynamicObjectCrossing(BasicScenario):
 
         self._adversary_speed = 2.0  # Speed of the adversary [m/s]
         self._crossing_angle = get_value_parameter(config, 'crossing_angle', float, 0)
-        self._reaction_time = 2.15  # Time the agent has to react to avoid the collision [s]
+        self._reaction_time = 2.1  # Time the agent has to react to avoid the collision [s]
         self._reaction_time += 0.1 * floor(self._crossing_angle / 5)
         self._min_trigger_dist = 6.0  # Min distance to the collision location that triggers the adversary [m]
         self._ego_end_distance = 40
@@ -402,7 +402,7 @@ class ParkingCrossingPedestrian(BasicScenario):
         self._ego_end_distance = 40
         self.timeout = timeout
 
-        self._bp_attributes = {'base_type': 'car', 'has_lights': False}
+        self._bp_attributes = {'base_type': 'car', 'generation': 2}
 
         self._distance = get_value_parameter(config, 'distance', float, 12)
         self._crossing_angle = get_value_parameter(config, 'crossing_angle', float, 0)

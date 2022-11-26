@@ -1818,17 +1818,19 @@ class RunningStopTest(Criterion):
         self._target_stop_sign = None
         self._stop_completed = False
 
+        self._last_failed_stop = None
+
         for _actor in CarlaDataProvider.get_all_actors():
             if 'traffic.stop' in _actor.type_id:
                 self._list_stop_signs.append(_actor)
 
-    def point_inside_boundingbox(self, point, bb_center, bb_extent):
-        """Checks whether or not a point is inside a bounding box"""
+    def point_inside_boundingbox(self, point, bb_center, bb_extent, multiplier=1.2):
+        """Checks whether or not a point is inside a bounding box."""
 
         # pylint: disable=invalid-name
-        A = carla.Vector2D(bb_center.x - bb_extent.x, bb_center.y - bb_extent.y)
-        B = carla.Vector2D(bb_center.x + bb_extent.x, bb_center.y - bb_extent.y)
-        D = carla.Vector2D(bb_center.x - bb_extent.x, bb_center.y + bb_extent.y)
+        A = carla.Vector2D(bb_center.x - multiplier * bb_extent.x, bb_center.y - multiplier * bb_extent.y)
+        B = carla.Vector2D(bb_center.x + multiplier * bb_extent.x, bb_center.y - multiplier * bb_extent.y)
+        D = carla.Vector2D(bb_center.x - multiplier * bb_extent.x, bb_center.y + multiplier * bb_extent.y)
         M = carla.Vector2D(point.x, point.y)
 
         AB = B - A
@@ -1921,7 +1923,7 @@ class RunningStopTest(Criterion):
                 self._stop_completed = True
 
         if not self.is_actor_affected_by_stop(check_wps, self._target_stop_sign):
-            if not self._stop_completed:
+            if not self._stop_completed and self._last_failed_stop != self._target_stop_sign.id:
                 # did we stop?
                 self.actual_value += 1
                 self.test_status = "FAILURE"
@@ -1936,6 +1938,8 @@ class RunningStopTest(Criterion):
                 running_stop_event.set_dict({'id': self._target_stop_sign.id, 'location': stop_location})
 
                 self.events.append(running_stop_event)
+
+                self._last_failed_stop = self._target_stop_sign.id
 
             # Reset state
             self._target_stop_sign = None
@@ -2065,7 +2069,7 @@ class MinimumSpeedRouteTest(Criterion):
 
             self._traffic_event = TrafficEvent(TrafficEventType.MIN_SPEED_INFRACTION, GameTime.get_frame())
             self._traffic_event.set_dict({'percentage': checkpoint_value})
-            self._traffic_event.set_message(f"Average speed is {checkpoint_value} of the surrounding traffic's one")
+            self._traffic_event.set_message(f"Average speed is {checkpoint_value}% of the surrounding traffic's one")
             self.events.append(self._traffic_event)
 
         self._checkpoint_values.append(checkpoint_value)
@@ -2080,7 +2084,7 @@ class MinimumSpeedRouteTest(Criterion):
             self._set_traffic_event()
 
         if len(self._checkpoint_values):
-            self.actual_value = sum(self._checkpoint_values) / len(self._checkpoint_values)
+            self.actual_value = round(sum(self._checkpoint_values) / len(self._checkpoint_values), 2)
         super().terminate(new_status)
 
 
