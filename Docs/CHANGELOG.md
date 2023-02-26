@@ -14,10 +14,50 @@
 
 ## Latest changes
 ### :rocket: New Features
+* Improved the timeout at routes
+* Actor Flows are now more consistent
+* Scenarios can now parse and use all parameters present at the configuration file.
+* Improved overall parsing of routes and scenarios.
+* Added new scenarios:
+    - Accident: the ego has to lane change in order to avoid an accident. Two variants, one with traffic in the same direction,a nd another one having to invade the opposite lane
+    - ParkingExit: the ego starts parked at the side and has to maneuver to properly enter the driving road.
+    - CrossBycicleFlow: the ego has to do a turn at an intersection but it has to cross a bycicle lane full of incoming traffic
+    - VehicleOpensDoor: a parked vehicle next to the ego suddenly opens the door, forcing the ego to brake. The ego has to maneuver to an adjacent lane to surpass the obstacle.
+    - HighwayCutIn: The ego is met with a vehicle that tries to enter the highway by cutting in front of it.
+    - PedestrianCrossing: A group of natual pedestrians crossing the road.
+    - YieldToEmergencyVehicle: The ego has to yield its lane to emergency vehicle.
+    - ParkingCutIn: A vehicle parked at the side cuts in front of the ego.
+    - BlockedIntersection: With low visibility, the ego performs a turn only to find out that the end is blocked by another vehicle.
+    - MergerIntoSlowTraffic: the ego has to enter a lane that is filled with slow traffic.
+    - InterurbanActorFlow and InterurbanAdvancedActorFlow: actor flow scenarios for the new interurban intersections with dedicated lanes.
+    - ParkingCrossingPedestrian: similar to DynamicObjectCrossing, but the occluder is a vehicle stopped at a parking lane.
+    - ParkedObstacle: very similar to the Accident one but with a different blocker.
+    - NonSignalizedJunctionLeftTurn: non signalized version of SignalizedJunctionLeftTurn.
+    - NonSignalizedJunctionRightTurn: non signalized version of SignalizedJunctionRightTurn.
+    - OppositeVehicleTakingPriority: non signalized version of OppositeVehicleRunningRedLight.
+    - BackgroundActivityParametrizer: allows the customization of the BackgroundActivity parameters.
+    - PriorityAtJunction: sets the traffic light of the incoming junction to green. Improves route smoothness by letting the vehicle cross the junction without stopping.
+    - BicycleFlowAtSideLane:Added the dangerous scene of ego vehicles driving on roads without sidewalks, with three bicycles encroaching on some roads in front.
+    - InvadingTurn: the ego is about to turn right when a vehicle coming from the opposite lane invades the ego's lane, forcing the ego to move right to avoid a possible collision.
+* Added new functions to the BackgroundManager
 * Minor improvements to some example scenarios. These include FollowLeadingVehicle, VehicleTurning, DynamicObjectCrossing and SignalizedJunctionRightTurn and RunningRedLight. Their behaviors are now more smooth, robust and some outdated mechanics have been removed
 * SignalizedJunctionLeftTurn has been remade. It now has an actor flow on which the ego has to merge into, instead of a single vehicle.
+* `NoSignalJunctionCrossingRoute` scenario has been moved from `junction_crossing_route.py` to `no_signal_junction_crossing.py`
 * The BackgroundActivity has been readded to the routes, which the objective of creating the sensation of traffic around the ego
-* Add waypoint reached threshold so that the precision of the actor reaching to waypoints can be adjusted based on object types.
+* BasicScenario and Scenario class have been merged into one, simplifying its usage.
+* Actor Flows are now more consistent.
+* Scenarios are no logner fixed to a location but instead are now part of the route.
+* Routes now automatically import all scenarios.
+* Routes will now also take into account the criteria of their specific scenarios, only being active when they are running. The ResultWriter now automaically adds these criteria, grouping them if more than one scenario of the same type is triggered.
+* Routes can now have dynamic weather. These are set by keypoints at a routes percentage, and all values between them are interpolated.
+* Separated the route argument into two, `route` for the file path, and `route-id`, for the name of route. the functionaility remains unchanged.
+* Added a new criteria for routes, `CheckMinSpeed`, that checks the ego's speed and compares it with teh rest of the traffic
+
+* Scenarios can now parse and use all parameters present at the configuration file.
+* Renamed RouteScenarioConfiguration's 'trajectory' to 'keypoints' and 'scenarios' to 'scenario_configs`
+* Improved the handling of the route information. Added the route information to their configuration (config.route). As such,`CarlaDataProvider.get_ego_vehicle_route()` and `CarlaDataProvider.set_ego_vehicle_route()` functions have been replaced.
+* The CarlaDataProvider's spawning functions can now filter vehicles by type.
+* atomic criteria now have the `units` attribute, which is used by the ResultWriter for better output readibility.
 
 ### :bug: Bug Fixes
 * Fixed bug at OtherLeadingVehicle scenario causing the vehicles to move faster than intended
@@ -453,3 +493,4 @@
     - WaitForTrafficLightState: wait for the traffic light to have a given state
     - SyncArrival: sync the arrival of two vehicles to a given target
     - AddNoiseToVehicle: Add noise to steer as well as throttle of the vehicle
+    - CutInWithStaticVehicle:Based on the code of ParkingCutIn,realized the cutin function of a static vehicle on the highway
