@@ -33,15 +33,19 @@ def get_lane_key(waypoint):
     object and used to compare waypoint lanes"""
     return '' if waypoint is None else get_road_key(waypoint) + '*' + str(waypoint.lane_id)
 
-
 def get_road_key(waypoint):
     """Returns a key corresponding to the waypoint road. Equivalent to a 'Road'
     object and used to compare waypoint roads"""
     return '' if waypoint is None else str(waypoint.road_id)
 
 def is_lane_at_road(lane_key, road_key):
-    """Returns whther or not a lane is part of a road"""
+    """Returns whether or not a lane is part of a road"""
     return lane_key.startswith(road_key)
+
+def get_lane_key_from_ids(road_id, lane_id):
+    """Returns the lane corresping to a given road and lane ids"""
+    return str(road_id) + '*' + str(lane_id)
+
 
 # Debug variables
 DEBUG_ROAD = 'road'
@@ -171,8 +175,8 @@ class BackgroundBehavior(AtomicBehavior):
         self.debug = debug
         self._map = CarlaDataProvider.get_map()
         self._world = CarlaDataProvider.get_world()
-        self._tm = CarlaDataProvider.get_client().get_trafficmanager(
-            CarlaDataProvider.get_traffic_manager_port())
+        self._tm_port = CarlaDataProvider.get_traffic_manager_port()
+        self._tm = CarlaDataProvider.get_client().get_trafficmanager(self._tm_port)
         self._tm.global_percentage_speed_difference(0.0)
         self._rng = CarlaDataProvider.get_random_seed()
 
@@ -194,6 +198,12 @@ class BackgroundBehavior(AtomicBehavior):
         self._spawn_free_radius = 20  # Sources closer to the ego will not spawn actors
         self._fake_junction_ids = []
         self._fake_lane_pair_keys = []
+
+        # Initialisation values
+        self._vehicle_lane_change = False
+        self._vehicle_lights = True
+        self._vehicle_leading_distance = 10
+        self._vehicle_offset = 0.1
 
         # Road variables
         self._road_dict = {}  # Dictionary lane key -> actor source
@@ -242,6 +252,7 @@ class BackgroundBehavior(AtomicBehavior):
 
         # Scenario variables:
         self._scenario_stopped_actors = []  # Actors stopped by a hard break scenario
+        self._scenario_stopped_back_actors = []  # Actors stopped by a open doors scenario
         self._scenario_max_speed = 0  # Max speed of the Background Activity. Deactivated with a value of 0
         self._scenario_junction_entry = False  # Flag indicating the ego is entering a junction
         self._scenario_junction_entry_distance = self._road_spawn_dist  # Min distance between vehicles and ego
@@ -1417,7 +1428,17 @@ class BackgroundBehavior(AtomicBehavior):
                         spawn_wps.insert(0, next_wp)
 
                     actors = self._spawn_actors(spawn_wps)
-                    self._road_dict[get_lane_key(source_wp)] = Source(source_wp, actors, active=self._active_road_sources)
+
+                    if get_lane_key(source_wp) not in self._road_dict:
+                        # Lanes created away from the center won't affect the ids of other lanes, so just add the new id
+                        self._road_dict[get_lane_key(source_wp)] = Source(source_wp, actors, active=self._active_road_sources)
+                    else:
+                        # If the lane is inwards, all lanes have their id shifted by 1 outwards
+                        # TODO: Doesn't work for more than one lane.
+                        added_id = 1 if source_wp.lane_id > 0 else -1
+                        new_lane_key = get_lane_key_from_ids(source_wp.road_id, source_wp.lane_id + added_id)
+                        self._road_dict[new_lane_key] = self._road_dict[get_lane_key(source_wp)]
+                        self._road_dict[get_lane_key(source_wp)] = Source(source_wp, actors, active=self._active_road_sources)
 
         elif len(new_wps) < len(old_wps):
             for old_wp in list(old_wps):
@@ -1659,13 +1680,25 @@ class BackgroundBehavior(AtomicBehavior):
             self._start_road_front_vehicles()
             py_trees.blackboard.Blackboard().set("BA_StartFrontVehicles", None, True)
 
+        # Stop back vehicles
+        stop_back_data = py_trees.blackboard.Blackboard().get('BA_StopBackVehicles')
+        if stop_back_data is not None:
+            self._stop_road_back_vehicles()
+            py_trees.blackboard.Blackboard().set('BA_StopBackVehicles', None, True)
+
+        # Start back vehicles
+        start_back_data = py_trees.blackboard.Blackboard().get('BA_StartBackVehicles')
+        if start_back_data is not None:
+            self._start_road_back_vehicles()
+            py_trees.blackboard.Blackboard().set("BA_StartBackVehicles", None, True)
+
         # Leave space in front
         leave_space_data = py_trees.blackboard.Blackboard().get('BA_LeaveSpaceInFront')
         if leave_space_data is not None:
             self._leave_space_in_front(leave_space_data)
             py_trees.blackboard.Blackboard().set('BA_LeaveSpaceInFront', None, True)
 
-        # Leave space in front
+        # Leave crosssing space
         leave_crossing_space_data = py_trees.blackboard.Blackboard().get('BA_LeaveCrossingSpace')
         if leave_crossing_space_data is not None:
             self._leave_crossing_space(leave_crossing_space_data)
@@ -1706,8 +1739,7 @@ class BackgroundBehavior(AtomicBehavior):
 
     def _stop_road_front_vehicles(self):
         """
-        Manages the break scenario, where all road vehicles in front of the ego suddenly stop,
-        wait for a bit, and start moving again. This will never trigger unless done so from outside.
+        Stops all road vehicles in front of the ego. Use `_start_road_front_vehicles` to make them move again.
         """
         for lane in self._road_dict:
             for actor in self._road_dict[lane].actors:
@@ -1722,8 +1754,7 @@ class BackgroundBehavior(AtomicBehavior):
 
     def _start_road_front_vehicles(self):
         """
-        Manages the break scenario, where all road vehicles in front of the ego suddenly stop,
-        wait for a bit, and start moving again. This will never trigger unless done so from outside.
+        Restarts all road vehicles stopped by `_stop_road_front_vehicles`.
         """
         for actor in self._scenario_stopped_actors:
             self._actors_speed_perc[actor] = 100
@@ -1732,6 +1763,25 @@ class BackgroundBehavior(AtomicBehavior):
             lights &= ~carla.VehicleLightState.Brake
             actor.set_light_state(carla.VehicleLightState(lights))
         self._scenario_stopped_actors = []
+
+    def _stop_road_back_vehicles(self):
+        """
+        Stops all road vehicles behind the ego. Use `_start_road_back_vehicles` to make them move again.
+        """
+        for lane in self._road_dict:
+            for actor in self._road_dict[lane].actors:
+                location = CarlaDataProvider.get_location(actor)
+                if location and self._is_location_behind_ego(location):
+                    self._actors_speed_perc[actor] = 0
+                    self._scenario_stopped_back_actors.append(actor)
+
+    def _start_road_back_vehicles(self):
+        """
+        Restarts all road vehicles stopped by `_stop_road_back_vehicles`.
+        """
+        for actor in self._scenario_stopped_back_actors:
+            self._actors_speed_perc[actor] = 100
+        self._scenario_stopped_back_actors = []
 
     def _move_actors_forward(self, actors, space):
         """Teleports the actors forward a set distance"""
@@ -1788,8 +1838,8 @@ class BackgroundBehavior(AtomicBehavior):
 
     def _leave_crossing_space(self, collision_wp):
         """Removes all vehicle in the middle of crossing trajectory and stops the nearby ones"""
-        destruction_dist = 10
-        stop_dist = 15
+        destruction_dist = 20
+        stop_dist = 30
 
         opposite_wp = collision_wp.get_left_lane()
         if not opposite_wp:
@@ -2060,11 +2110,10 @@ class BackgroundBehavior(AtomicBehavior):
         """
         Save the actor into the needed structures, disable its lane changes and set the leading distance.
         """
-        self._tm.auto_lane_change(actor, False)
-        self._tm.update_vehicle_lights(actor, True)
-        self._tm.distance_to_leading_vehicle(actor, 10)
-        self._tm.vehicle_lane_offset(actor, 0.1)
-        self._actors_speed_perc[actor] = 100
+        self._tm.auto_lane_change(actor, self._vehicle_lane_change)
+        self._tm.update_vehicle_lights(actor, self._vehicle_lights)
+        self._tm.distance_to_leading_vehicle(actor, self._vehicle_leading_distance)
+        self._tm.vehicle_lane_offset(actor, self._vehicle_offset)
         self._all_actors.append(actor)
 
     def _spawn_actor(self, spawn_wp, ego_dist=0):
@@ -2148,6 +2197,7 @@ class BackgroundBehavior(AtomicBehavior):
         Not applied to those behind it so that they can catch up it
         """
         # Updates their speed
+        scenario_actors = self._scenario_stopped_actors + self._scenario_stopped_back_actors
         for lane_key in self._road_dict:
             for i, actor in enumerate(self._road_dict[lane_key].actors):
                 location = CarlaDataProvider.get_location(actor)
@@ -2161,7 +2211,7 @@ class BackgroundBehavior(AtomicBehavior):
                     draw_string(self._world, location, string, DEBUG_ROAD, False)
 
                 # Actors part of scenarios are their own category, ignore them
-                if actor in self._scenario_stopped_actors:
+                if actor in scenario_actors:
                     continue
 
                 # TODO: Lane changes are weird with the TM, so just stop them
@@ -2178,7 +2228,7 @@ class BackgroundBehavior(AtomicBehavior):
                         lights |= carla.VehicleLightState.LeftBlinker
                         lights |= carla.VehicleLightState.Position
                         actor.set_light_state(carla.VehicleLightState(lights))
-                        actor.set_autopilot(False)
+                        actor.set_autopilot(False, self._tm_port)
                         continue
 
                 self._set_road_actor_speed(location, actor)
@@ -2253,13 +2303,24 @@ class BackgroundBehavior(AtomicBehavior):
             if get_road_key(prev_wp) != get_road_key(current_wp):
                 return True
 
-            # Some roads have ending lanes in the middle. Remap if that is detected
+            # Some roads have starting / ending lanes in the middle. Remap if that is detected
             prev_wps = get_same_dir_lanes(prev_wp)
             current_wps = get_same_dir_lanes(current_wp)
             if len(prev_wps) != len(current_wps):
                 return True
 
             return False
+
+        def is_road_dict_unchanging(wp_pairs):
+            """Sometimes 'monitor_topology_changes' has already done the necessary changes"""
+            road_dict_keys = list(self._road_dict)
+            if len(wp_pairs) != len(road_dict_keys):
+                return False
+
+            for _, new_wp in wp_pairs:
+                if get_lane_key(new_wp) not in road_dict_keys:
+                    return False
+            return True
 
         if prev_route_index == self._route_index:
             return
@@ -2274,7 +2335,10 @@ class BackgroundBehavior(AtomicBehavior):
         new_wps = get_lane_waypoints(route_wp, 0)
         check_dist = 1.1 * route_wp.transform.location.distance(prev_route_wp.transform.location)
         wp_pairs = get_wp_pairs(old_wps, new_wps, check_dist)
-        # TODO: these pairs are sometimes wrong as some fake intersections have overlapping lanes (highway entries)
+        # TODO: These pairs are sometimes wrong as some fake intersections have overlapping lanes (highway entries)
+
+        if is_road_dict_unchanging(wp_pairs):
+            return
 
         for old_wp, new_wp in wp_pairs:
             old_key = get_lane_key(old_wp)
@@ -2454,6 +2518,8 @@ class BackgroundBehavior(AtomicBehavior):
             self._opposite_actors.remove(actor)
         if actor in self._scenario_stopped_actors:
             self._scenario_stopped_actors.remove(actor)
+        if actor in self._scenario_stopped_back_actors:
+            self._scenario_stopped_back_actors.remove(actor)
 
         for opposite_source in self._opposite_sources:
             if actor in opposite_source.actors:
@@ -2481,8 +2547,8 @@ class BackgroundBehavior(AtomicBehavior):
     def _destroy_actor(self, actor):
         """Destroy the actor and all its references"""
         self._remove_actor_info(actor)
-        actor.set_autopilot(False)
         try:
+            actor.set_autopilot(False, self._tm_port)
             actor.destroy()
         except RuntimeError:
             pass

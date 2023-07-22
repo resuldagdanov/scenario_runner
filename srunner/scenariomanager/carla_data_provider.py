@@ -14,6 +14,7 @@ from __future__ import print_function
 
 import math
 import re
+import threading
 from numpy import random
 from six import iteritems
 
@@ -66,30 +67,34 @@ class CarlaDataProvider(object):  # pylint: disable=too-many-public-methods
     _random_seed = 2000
     _rng = random.RandomState(_random_seed)
     _grp = None
+    _runtime_init_flag = False
+    _lock = threading.Lock()
 
     @staticmethod
-    def register_actor(actor):
+    def register_actor(actor, transform=None):
         """
         Add new actor to dictionaries
         If actor already exists, throw an exception
         """
-        if actor in CarlaDataProvider._actor_velocity_map:
-            raise KeyError(
-                "Vehicle '{}' already registered. Cannot register twice!".format(actor.id))
-        else:
-            CarlaDataProvider._actor_velocity_map[actor] = 0.0
+        with CarlaDataProvider._lock:
+            if actor in CarlaDataProvider._actor_velocity_map:
+                raise KeyError(
+                    "Vehicle '{}' already registered. Cannot register twice!".format(actor.id))
+            else:
+                CarlaDataProvider._actor_velocity_map[actor] = 0.0
+            if actor in CarlaDataProvider._actor_location_map:
+                raise KeyError(
+                    "Vehicle '{}' already registered. Cannot register twice!".format(actor.id))
+            elif transform:
+                CarlaDataProvider._actor_location_map[actor] = transform.location
+            else:
+                CarlaDataProvider._actor_location_map[actor] = None
 
-        if actor in CarlaDataProvider._actor_location_map:
-            raise KeyError(
-                "Vehicle '{}' already registered. Cannot register twice!".format(actor.id))
-        else:
-            CarlaDataProvider._actor_location_map[actor] = None
-
-        if actor in CarlaDataProvider._actor_transform_map:
-            raise KeyError(
-                "Vehicle '{}' already registered. Cannot register twice!".format(actor.id))
-        else:
-            CarlaDataProvider._actor_transform_map[actor] = None
+            if actor in CarlaDataProvider._actor_transform_map:
+                raise KeyError(
+                    "Vehicle '{}' already registered. Cannot register twice!".format(actor.id))
+            else:
+                CarlaDataProvider._actor_transform_map[actor] = transform
 
     @staticmethod
     def update_osc_global_params(parameters):
@@ -106,35 +111,39 @@ class CarlaDataProvider(object):  # pylint: disable=too-many-public-methods
         return CarlaDataProvider._global_osc_parameters.get(ref.replace("$", ""))
 
     @staticmethod
-    def register_actors(actors):
+    def register_actors(actors, transforms=None):
         """
         Add new set of actors to dictionaries
         """
-        for actor in actors:
-            CarlaDataProvider.register_actor(actor)
+        if transforms is None:
+            transforms = [None] * len(actors)
+
+        for actor, transform in zip(actors, transforms):
+            CarlaDataProvider.register_actor(actor, transform)
 
     @staticmethod
     def on_carla_tick():
         """
         Callback from CARLA
         """
-        for actor in CarlaDataProvider._actor_velocity_map:
-            if actor is not None and actor.is_alive:
-                CarlaDataProvider._actor_velocity_map[actor] = calculate_velocity(actor)
+        with CarlaDataProvider._lock:
+            for actor in CarlaDataProvider._actor_velocity_map:
+                if actor is not None and actor.is_alive:
+                    CarlaDataProvider._actor_velocity_map[actor] = calculate_velocity(actor)
 
-        for actor in CarlaDataProvider._actor_location_map:
-            if actor is not None and actor.is_alive:
-                CarlaDataProvider._actor_location_map[actor] = actor.get_location()
+            for actor in CarlaDataProvider._actor_location_map:
+                if actor is not None and actor.is_alive:
+                    CarlaDataProvider._actor_location_map[actor] = actor.get_location()
 
-        for actor in CarlaDataProvider._actor_transform_map:
-            if actor is not None and actor.is_alive:
-                CarlaDataProvider._actor_transform_map[actor] = actor.get_transform()
+            for actor in CarlaDataProvider._actor_transform_map:
+                if actor is not None and actor.is_alive:
+                    CarlaDataProvider._actor_transform_map[actor] = actor.get_transform()
 
-        world = CarlaDataProvider._world
-        if world is None:
-            print("WARNING: CarlaDataProvider couldn't find the world")
+            world = CarlaDataProvider._world
+            if world is None:
+                print("WARNING: CarlaDataProvider couldn't find the world")
 
-        CarlaDataProvider._all_actors = None
+            CarlaDataProvider._all_actors = None
 
     @staticmethod
     def get_velocity(actor):
@@ -261,6 +270,20 @@ class CarlaDataProvider(object):  # pylint: disable=too-many-public-methods
         @return true if syncronuous mode is used
         """
         return CarlaDataProvider._sync_flag
+
+    @staticmethod
+    def set_runtime_init_mode(flag):
+        """
+        Set the runtime init mode
+        """
+        CarlaDataProvider._runtime_init_flag = flag
+
+    @staticmethod
+    def is_runtime_init_mode():
+        """
+        @return true if runtime init mode is used
+        """
+        return CarlaDataProvider._runtime_init_flag
 
     @staticmethod
     def find_weather_presets():
@@ -543,6 +566,8 @@ class CarlaDataProvider(object):  # pylint: disable=too-many-public-methods
         # Wait (or not) for the actors to be spawned properly before we do anything
         if not tick:
             pass
+        elif CarlaDataProvider.is_runtime_init_mode():
+            CarlaDataProvider._world.wait_for_tick()
         elif sync_mode:
             CarlaDataProvider._world.tick()
         else:
@@ -596,13 +621,15 @@ class CarlaDataProvider(object):  # pylint: disable=too-many-public-methods
         # Wait for the actor to be spawned properly before we do anything
         if not tick:
             pass
+        elif CarlaDataProvider.is_runtime_init_mode():
+            CarlaDataProvider._world.wait_for_tick()
         elif CarlaDataProvider.is_sync_mode():
             CarlaDataProvider._world.tick()
         else:
             CarlaDataProvider._world.wait_for_tick()
 
         CarlaDataProvider._carla_actor_pool[actor.id] = actor
-        CarlaDataProvider.register_actor(actor)
+        CarlaDataProvider.register_actor(actor, spawn_point)
         return actor
 
     @staticmethod
@@ -676,7 +703,7 @@ class CarlaDataProvider(object):  # pylint: disable=too-many-public-methods
             if actor is None:
                 continue
             CarlaDataProvider._carla_actor_pool[actor.id] = actor
-            CarlaDataProvider.register_actor(actor)
+            CarlaDataProvider.register_actor(actor, _spawn_point)
 
         return actors
 
@@ -722,15 +749,14 @@ class CarlaDataProvider(object):  # pylint: disable=too-many-public-methods
 
             if spawn_point:
                 batch.append(SpawnActor(blueprint, spawn_point).then(
-                    SetAutopilot(FutureActor, autopilot,
-                                 CarlaDataProvider._traffic_manager_port)))
+                    SetAutopilot(FutureActor, autopilot, CarlaDataProvider._traffic_manager_port)))
 
         actors = CarlaDataProvider.handle_actor_batch(batch, tick)
         for actor in actors:
             if actor is None:
                 continue
             CarlaDataProvider._carla_actor_pool[actor.id] = actor
-            CarlaDataProvider.register_actor(actor)
+            CarlaDataProvider.register_actor(actor, spawn_point)
 
         return actors
 
@@ -852,3 +878,4 @@ class CarlaDataProvider(object):  # pylint: disable=too-many-public-methods
         CarlaDataProvider._spawn_index = 0
         CarlaDataProvider._rng = random.RandomState(CarlaDataProvider._random_seed)
         CarlaDataProvider._grp = None
+        CarlaDataProvider._runtime_init_flag = False
